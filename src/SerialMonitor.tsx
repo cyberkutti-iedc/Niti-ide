@@ -23,6 +23,7 @@ const SerialMonitor = () => {
   const [receivedData, setReceivedData] = useState<string>("");
   const [inputData, setInputData] = useState<string>("");
   const [autoRead, setAutoRead] = useState(false);
+  const [isLineByLine, setIsLineByLine] = useState(false); // State to toggle line-by-line mode
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const toast = useToast();
 
@@ -103,7 +104,12 @@ const SerialMonitor = () => {
   const readFromPort = async () => {
     try {
       const data = await invoke("read_serial_port");
-      setReceivedData((prevData) => prevData + data);
+      if (isLineByLine) {
+        const lines = data.split("\n");
+        setReceivedData((prevData) => prevData + lines.map(line => line.trim()).filter(line => line).join("\n"));
+      } else {
+        setReceivedData((prevData) => prevData + data);
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -136,6 +142,10 @@ const SerialMonitor = () => {
     setAutoRead((prevAutoRead) => !prevAutoRead);
   };
 
+  const toggleLineMode = () => {
+    setIsLineByLine((prevMode) => !prevMode);
+  };
+
   useEffect(() => {
     if (autoRead && isConnected) {
       intervalRef.current = setInterval(readFromPort, 500);
@@ -150,7 +160,7 @@ const SerialMonitor = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [autoRead, isConnected]);
+  }, [autoRead, isConnected, isLineByLine]);
 
   useEffect(() => {
     refreshPorts();
@@ -213,6 +223,13 @@ const SerialMonitor = () => {
             colorScheme="teal"
             isDisabled={!isConnected}
           />
+          <Button
+            onClick={toggleLineMode}
+            colorScheme="purple"
+            variant={isLineByLine ? "outline" : "solid"}
+          >
+            {!isLineByLine ? "Line-by-Line Mode" : "Normal Mode"}
+          </Button>
         </HStack>
 
         <Box>
@@ -225,6 +242,7 @@ const SerialMonitor = () => {
             readOnly
             height="150px"  // Reduced height
             resize="none"
+            whiteSpace="pre-wrap"  // Preserve white space and line breaks
           />
           {!autoRead && (
             <Button

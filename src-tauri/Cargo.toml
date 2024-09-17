@@ -1,7 +1,7 @@
 [package]
 name = "niti-ide"
 version = "0.1.0"
-description = "A Tauri App"
+description = "The Niti IDE is a straightforward development environment designed for flashing the Niti framework onto Niti boards using Rust. The initial version supports the V2560 board, providing a user-friendly interface for writing, debugging, and deploying Rust code to efficiently work with the Niti framework."
 authors = ["you"]
 edition = "2021"
 
