@@ -107,10 +107,10 @@ const MenuBar: React.FC<MenuBarProps> = ({
           <MenuButton as={Button}>View</MenuButton>
           <MenuList>
             <MenuItem onClick={zoomIn}>
-              Zoom In <Text fontSize="sm" color="gray.400" ml={2}>(Ctrl+)</Text>
+              Zoom In <Text fontSize="sm" color="gray.400" ml={2}>(Ctrl+Shift +)</Text>
             </MenuItem>
             <MenuItem onClick={zoomOut}>
-              Zoom Out <Text fontSize="sm" color="gray.400" ml={2}>(Ctrl-)</Text>
+              Zoom Out <Text fontSize="sm" color="gray.400" ml={2}>(Ctrl+Shift -)</Text>
             </MenuItem>
             <MenuItem onClick={fitWindow}>
               Fit Window
