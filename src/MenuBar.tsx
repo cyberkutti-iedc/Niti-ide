@@ -6,8 +6,8 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  IconButton,
-  useColorMode,
+  
+  
   Modal,
   ModalOverlay,
   ModalContent,
@@ -19,7 +19,7 @@ import {
   Box,
   Stack,
 } from '@chakra-ui/react';
-import { MoonIcon, SunIcon } from '@chakra-ui/icons';
+//import { MoonIcon, SunIcon } from '@chakra-ui/icons';
 import { invoke } from '@tauri-apps/api/tauri';
 
 interface MenuBarProps {
@@ -43,11 +43,9 @@ const MenuBar: React.FC<MenuBarProps> = ({
   zoomOut,
   fitWindow,
   buildProject,
-  runProject,
-  flashToController,
-  toggleColorMode,
+  runProject
 }) => {
-  const { colorMode, toggleColorMode: toggleTheme } = useColorMode();
+  //const { colorMode, toggleColorMode: toggleTheme } = useColorMode();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isExitModalOpen, onOpen: onOpenExitModal, onClose: onCloseExitModal } = useDisclosure();
 
@@ -141,21 +139,24 @@ const MenuBar: React.FC<MenuBarProps> = ({
             <MenuItem onClick={runProject}>
               Run
             </MenuItem>
-            <MenuItem onClick={flashToController}>
-              Flash to Controller
-            </MenuItem>
+           
             <MenuItem onClick={handleShowBoardInfo}>
               Show Board Info
             </MenuItem>
           </MenuList>
         </Menu>
 
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle Button 
         <IconButton
-          aria-label="Toggle Dark Mode"
-          icon={colorMode === 'dark' ? <SunIcon /> : <MoonIcon />}
-          onClick={toggleTheme}
-        />
+      aria-label="Toggle Dark Mode"
+      icon={colorMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+      onClick={toggleColorMode}
+      bg={colorMode === 'dark' ? '#ccc' : 'gray.800'} // Light mode bg: #ccc, Dark mode bg: gray.800
+      color={colorMode === 'dark' ? 'gray.800' : 'whiteAlpha.900'} // Text color for each mode
+      _hover={{
+        bg: colorMode === 'dark' ? '#bbb' : 'gray.700', // Adjust hover colors
+      }}
+    />*/}
       </HStack>
 
       {/* Exit Confirmation Modal */}

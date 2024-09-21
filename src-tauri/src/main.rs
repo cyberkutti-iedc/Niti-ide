@@ -13,6 +13,11 @@ use winapi::shared::winerror::*;
 use winapi::shared::guiddef::*;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use std::ptr;
+use tauri::Window;
+use std::process::{Command, Stdio};
+use std::path::Path;
+use std::io::{BufReader, BufRead};
+use tauri::api::dialog::blocking::FileDialogBuilder;
 
 // SharedSerialPort struct to manage serial port across threads
 struct SharedSerialPort(Arc<Mutex<Option<Box<dyn SerialPort>>>>);
@@ -33,7 +38,12 @@ fn main() {
             open_serial_port,
             write_serial_port,
             read_serial_port,
-            get_board_info
+            get_board_info,
+            build_project,
+            run_project,
+            flash_to_controller,
+            open_cmd_window_and_build,
+            open_file_explorer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -219,4 +229,176 @@ fn fetch_device_info(board_info: &mut String) -> Result<(), String> {
 
         Ok(())
     }
+}
+
+#[tauri::command]
+fn build_project(file_path: String, window: tauri::Window) -> Result<(), String> {
+    let project_dir = std::path::Path::new(&file_path)
+        .parent()
+        .and_then(|src_dir| src_dir.parent());
+
+    if let Some(project_dir) = project_dir {
+        let cargo_toml_path = project_dir.join("Cargo.toml");
+
+        if !cargo_toml_path.exists() {
+            return Err(format!("Cargo.toml not found in {}", project_dir.display()));
+        }
+
+        // Run `cargo build` and capture stdout and stderr
+        let mut command = Command::new("cargo")
+            .arg("build")
+            .current_dir(&project_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start build: {}", e))?;
+
+        let stdout = command.stdout.take().ok_or("Failed to capture stdout")?;
+        let stderr = command.stderr.take().ok_or("Failed to capture stderr")?;
+
+        // Create a thread to read the stdout and stderr
+        let reader = BufReader::new(stdout);
+        let error_reader = BufReader::new(stderr);
+
+        let win = window.clone();
+        std::thread::spawn(move || {
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    // Send each line of output to the frontend
+                    win.emit("build-output", line).unwrap();
+                }
+            }
+        });
+
+        let win_err = window.clone();
+        std::thread::spawn(move || {
+            for line in error_reader.lines() {
+                if let Ok(line) = line {
+                    // Send each line of error to the frontend
+                    win_err.emit("build-output", format!("ERROR: {}", line)).unwrap();
+                }
+            }
+        });
+
+        command
+            .wait()
+            .map_err(|e| format!("Build process failed: {}", e))?;
+
+        Ok(())
+    } else {
+        Err("Invalid file path. Unable to determine project folder.".to_string())
+    }
+}
+
+#[tauri::command]
+fn run_project(file_path: String, selected_port: Option<String>) -> Result<String, String> {
+    let project_dir = Path::new(&file_path)
+        .parent()
+        .and_then(|src_dir| src_dir.parent());
+
+    if let Some(project_dir) = project_dir {
+        let cargo_toml_path = project_dir.join("Cargo.toml");
+
+        if !cargo_toml_path.exists() {
+            return Err(format!("Cargo.toml not found in {}", project_dir.display()));
+        }
+
+        // Prepare the command to run
+        let mut command = Command::new("cmd");
+        let mut args = vec!["/C".to_string(), "start".to_string(), "cmd".to_string(), "/K".to_string(), "cargo run".to_string()];
+
+        if let Some(port) = selected_port {
+            let port_arg = format!("--port {}", port);
+            args.push(port_arg); // Push the owned port argument
+        }
+
+        // Run the command
+        command
+            .args(args)
+            .current_dir(&project_dir)
+            .output()
+            .map_err(|error| format!("Failed to open CMD: {}", error))
+            .map(|_| "CMD opened successfully. Running `cargo run`.".to_string())
+    } else {
+        Err("Invalid file path. Unable to determine project folder.".to_string())
+    }
+}
+
+
+#[tauri::command]
+fn open_cmd_window_and_build(project_dir: String) -> Result<(), String> {
+    // Execute the command to open a new CMD window and run cargo build
+    match Command::new("cmd")
+        .args(&["/C", "start", "cmd", "/K", "cargo build"])
+        .current_dir(&project_dir)
+        .spawn()
+    {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to execute command: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn flash_to_controller(port: String, elf_path: String, window: Window) -> Result<String, String> {
+    if !Path::new(&elf_path).exists() {
+        return Err("The specified ELF file does not exist.".to_string());
+    }
+
+    let mut command = Command::new("ravedude")
+        .arg("uno")
+        .arg("-P")
+        .arg(port) // Use the port passed to the function
+        .arg("-cb")
+        .arg("57600")
+        .arg(&elf_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start flash: {}", e))?;
+
+    let stdout = command.stdout.take().ok_or("Failed to capture stdout")?;
+    let stderr = command.stderr.take().ok_or("Failed to capture stderr")?;
+
+    let win_out = window.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                win_out.emit("flash-output", line).unwrap_or_else(|e| {
+                    eprintln!("Failed to emit flash output: {}", e);
+                });
+            }
+        }
+    });
+
+    let win_err = window.clone();
+    std::thread::spawn(move || {
+        let error_reader = BufReader::new(stderr);
+        for line in error_reader.lines() {
+            if let Ok(line) = line {
+                win_err.emit("flash-output", format!("ERROR: {}", line)).unwrap_or_else(|e| {
+                    eprintln!("Failed to emit flash error output: {}", e);
+                });
+            }
+        }
+    });
+
+    command.wait().map_err(|e| format!("Flash process failed: {}", e))?;
+    Ok("Project flashed to controller.".to_string())
+}
+
+#[tauri::command]
+fn open_file_explorer(path: String) -> Result<(), String> {
+    Command::new("explorer")
+        .arg("/select,")
+        .arg(&path)
+        .status()
+        .map_err(|e| format!("Failed to open file explorer: {}", e))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Failed to open file explorer".to_string())
+            }
+        })
 }

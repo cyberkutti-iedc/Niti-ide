@@ -1,5 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { ChakraProvider, Box, extendTheme, useColorMode, useToast, Button, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import {
+  ChakraProvider,
+  Box,
+  extendTheme,
+  useColorMode,
+  useToast,
+  Button,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  Spinner, Center
+} from '@chakra-ui/react';
 import MonacoEditor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { dialog, window as tauriWindow } from '@tauri-apps/api';
@@ -20,16 +35,20 @@ const App = () => {
   const [filePath, setFilePath] = useState<string | null>(null);
   const [editorTabs, setEditorTabs] = useState<Array<{ path: string; content: string }>>([]);
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [ports, setPorts] = useState<string[]>([]);
+ 
   const { toggleColorMode } = useColorMode();
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure(); // Chakra UI modal hooks
   const [pendingAction, setPendingAction] = useState<'quit' | null>(null);
+  const [, setConfirmOpen] = useState(false);
+  const [elfFilePath] = useState<string | null>(null);
+  const [selectedPort] = useState<string>(''); 
+ 
+  const [isFlashing, setIsFlashing] = useState(false);
+  const [isLoading] = useState(false);
 
   useEffect(() => {
-    import('monaco-editor/esm/vs/editor/editor.main').then(() => {
-      // Monaco Editor is ready
-    });
+    
 
     // Add keyboard event listeners
     const handleKeyDown = async (event: KeyboardEvent) => {
@@ -153,17 +172,81 @@ const App = () => {
   const zoomIn = () => setFontSize((prev) => prev + 1);
   const zoomOut = () => setFontSize((prev) => prev - 1);
 
-  const buildProject = () => {
-    // Implement build project logic
+  const buildProject = async () => {
+    try {
+      const activeFile = editorTabs[activeTab];
+      if (!activeFile || !activeFile.path.endsWith('main.rs')) {
+        throw new Error('Please open the main.rs file to build the project');
+      }
+  
+      const buildResult = await invoke<string>('build_project', { filePath: activeFile.path });
+      console.log(buildResult);
+      toast({
+        title: "Build Started",
+        description: "A terminal window has been opened to build the project.",
+        status: "info",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      console.error('Build failed:', error);
+      toast({
+        title: "Build Failed",
+        description: `There was an error starting the build: ${error.message || error}`,
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+    }
   };
-
-  const runProject = () => {
-    // Implement run project logic
+  
+  const runProject = async () => {
+    try {
+      const activeFile = editorTabs[activeTab];
+      if (!activeFile || !activeFile.path.endsWith('main.rs')) {
+        throw new Error('Please open the main.rs file to run the project');
+      }
+  
+      const runResult = await invoke<string>('run_project', { filePath: activeFile.path });
+      console.log(runResult);
+      toast({
+        title: "Run Started",
+        description: "A terminal window has been opened to run the project.",
+        status: "info",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      console.error('Run failed:', error);
+      toast({
+        title: "Run Failed",
+        description: `There was an error starting the project: ${error.message || error}`,
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+    }
   };
-
-  const flashToController = () => {
-    // Implement flash to controller logic
+  
+  
+  
+  const flashToController = async () => {
+    if (!elfFilePath || !selectedPort) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a valid port and ELF file before flashing.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+  
+    setIsFlashing(true); // Start flashing
+    setConfirmOpen(true); // Open confirmation dialog
   };
+  
+ 
 
   const handleQuit = async () => {
     if (pendingAction === 'quit') {
@@ -198,13 +281,26 @@ const App = () => {
   return (
     <ChakraProvider theme={theme}>
       <Box height="100vh" display="flex" flexDirection="column">
+
+      {isLoading && (
+          <Center height="100%" width="100%">
+            <Spinner size="xl" />
+          </Center>
+        )}
+        
+        {isFlashing && (
+          <Center height="100%" width="100%">
+            <Spinner size="xl" />
+          </Center>
+        )}
+
         <MenuBar
           createNewFile={createNewFile}
           openFile={openFile}
           saveFile={saveFile}
           zoomIn={zoomIn}
           zoomOut={zoomOut}
-          fitWindow={() => {}}
+          fitWindow={() => {setFontSize(16)}}
           buildProject={buildProject}
           runProject={runProject}
           flashToController={flashToController}
@@ -213,6 +309,7 @@ const App = () => {
         <Box flex={1} display="flex" flexDirection="row" overflow="hidden">
           <SerialMonitor />
           <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
+           
             <TabBar
               tabs={editorTabs}
               activeTab={activeTab}
@@ -241,6 +338,8 @@ const App = () => {
           </Box>
         </Box>
       </Box>
+
+       
 
       {/* Quit Confirmation Modal */}
       <Modal isOpen={isOpen} onClose={onClose}>

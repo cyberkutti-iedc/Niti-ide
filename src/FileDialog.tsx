@@ -1,4 +1,5 @@
 import { open, save } from '@tauri-apps/api/dialog';
+import { invoke } from '@tauri-apps/api/tauri'; // Correct import for invoke
 import React from 'react';
 
 interface FileDialogProps {
@@ -9,17 +10,21 @@ interface FileDialogProps {
 const FileDialog: React.FC<FileDialogProps> = ({ onOpenFile, onSaveFile }) => {
   const handleOpen = async () => {
     const selectedFile = await open({
-      filters: [{ name: 'All Files', extensions: ['*'] }]
+      filters: [{ name: 'All Files', extensions: ['*'] }],
     });
     if (typeof selectedFile === 'string') {
-      const result = await window.__TAURI__.invoke('read_file', { path: selectedFile });
-      onOpenFile(selectedFile, result as string);
+      try {
+        const result = await invoke<string>('read_file', { path: selectedFile }); // Use invoke directly
+        onOpenFile(selectedFile, result);
+      } catch (error) {
+        console.error('Error reading file:', error);
+      }
     }
   };
 
   const handleSave = async () => {
     const selectedFile = await save({
-      filters: [{ name: 'All Files', extensions: ['*'] }]
+      filters: [{ name: 'All Files', extensions: ['*'] }],
     });
     if (typeof selectedFile === 'string') {
       onSaveFile(selectedFile);

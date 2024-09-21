@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import {
   Box,
@@ -14,6 +14,8 @@ import {
   Switch,
   useToast,
   Stack,
+  Spinner,
+  Center
 } from "@chakra-ui/react";
 
 const SerialMonitor = () => {
@@ -24,8 +26,9 @@ const SerialMonitor = () => {
   const [inputData, setInputData] = useState<string>("");
   const [autoRead, setAutoRead] = useState(false);
   const [isLineByLine, setIsLineByLine] = useState(false); // State to toggle line-by-line mode
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Corrected Timeout type
   const toast = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   const refreshPorts = async () => {
     try {
@@ -54,6 +57,7 @@ const SerialMonitor = () => {
 
   const connectToPort = async () => {
     if (selectedPort) {
+      setIsLoading(true); // Start loading
       try {
         await invoke("open_serial_port", { port: selectedPort });
         setIsConnected(true);
@@ -65,18 +69,21 @@ const SerialMonitor = () => {
           isClosable: true,
         });
       } catch (error) {
+        const errorMessage = (error as Error).message || "Unknown error occurred";
         toast({
           title: "Error",
-          description: `Failed to connect to ${selectedPort}.`,
+          description: `Failed to connect to ${selectedPort}. Error: ${errorMessage}`,
           status: "error",
           duration: 3000,
           isClosable: true,
         });
         console.error("Failed to open port:", error);
+      } finally {
+        setIsLoading(false); // End loading
       }
     }
   };
-
+  
   const disconnectFromPort = async () => {
     try {
       await invoke("close_serial_port");
@@ -103,10 +110,10 @@ const SerialMonitor = () => {
 
   const readFromPort = async () => {
     try {
-      const data = await invoke("read_serial_port");
+      const data = (await invoke("read_serial_port")) as string; // Cast 'data' as string
       if (isLineByLine) {
         const lines = data.split("\n");
-        setReceivedData((prevData) => prevData + lines.map(line => line.trim()).filter(line => line).join("\n"));
+        setReceivedData((prevData) => prevData + lines.map((line: string) => line.trim()).filter((line: string) => line).join("\n"));
       } else {
         setReceivedData((prevData) => prevData + data);
       }
@@ -175,6 +182,11 @@ const SerialMonitor = () => {
 
         <Flex direction={{ base: "column", md: "row" }} justify="space-between" align="center">
           <HStack spacing={4} mb={{ base: 4, md: 0 }}>
+            {isLoading && (
+              <Center height="100%" width="100%">
+                <Spinner size="xl" />
+              </Center>
+            )}
             <Text fontSize="lg">Select Port:</Text>
             <Select
               placeholder="Select a port"
